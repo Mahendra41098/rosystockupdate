@@ -856,8 +856,18 @@ nav{flex:1;padding:6px 0;overflow-y:auto}
           <hr class="divider">
           <div style="font-size:14px;font-weight:700;margin-bottom:12px">💾 Backup & Restore</div>
           <div style="display:flex;flex-direction:column;gap:8px">
-            <button class="btn bg" onclick="backupJ()" style="justify-content:flex-start">⬇️ Download JSON Backup</button>
-            <label class="btn bg" style="justify-content:flex-start;cursor:pointer">⬆️ Restore JSON <input type="file" accept=".json" style="display:none" onchange="restoreJ(event)"></label>
+            <button class="btn bp" onclick="backupJ()" style="justify-content:flex-start">⬇️ Full Backup (Data + Photos)</button>
+            <label class="btn bg" style="justify-content:flex-start;cursor:pointer">⬆️ Restore Full Backup <input type="file" accept=".json" style="display:none" onchange="restoreJ(event)"></label>
+          </div>
+          <!-- Photos-only backup -->
+          <div style="background:var(--bg3);border-radius:9px;padding:12px;margin-top:8px">
+            <div style="font-size:12px;font-weight:700;margin-bottom:8px;color:var(--t2)">📷 Photos Only</div>
+            <div style="font-size:11px;color:var(--t3);margin-bottom:8px">Save/restore only product photos. Useful when full backup is too large.</div>
+            <div style="display:flex;gap:7px">
+              <button class="btn bg sm" onclick="backupPhotosOnly()" style="flex:1;justify-content:center">⬇️ Save Photos</button>
+              <label class="btn bg sm" style="flex:1;justify-content:center;cursor:pointer">⬆️ Load Photos <input type="file" accept=".json" style="display:none" onchange="restorePhotos(event)"></label>
+            </div>
+            <div id="photoBackupInfo" style="font-size:11px;color:var(--t3);margin-top:6px"></div>
           </div>
           <div id="dInfo" style="margin-top:12px;font-size:12px;color:var(--t3);line-height:1.9"></div>
         </div>
@@ -1155,8 +1165,25 @@ let _camStream=null,_camFacing='environment',_cropImg=null,_curImgKey=null;
 let _cs={x:30,y:30,w:260,h:260,drag:false,resize:false,rh:null,sx:0,sy:0,snap:null};
 
 /* ─── DB ──────────────────────────────────── */
-function loadDB(){try{const r=localStorage.getItem('rosyV4');if(r)DB={...DB,...JSON.parse(r)};}catch(e){}}
-function saveDB(){try{localStorage.setItem('rosyV4',JSON.stringify(DB));}catch(e){toast('Storage full — backup!','err');}}
+function loadDB(){
+  try{const r=localStorage.getItem('rosyV4');if(r)DB={...DB,...JSON.parse(r)};}catch(e){}
+  // Load images from IndexedDB
+  loadAllPhotos().then(imgs=>{
+    DB.images=imgs||{};
+    // Refresh any image-dependent views if already on a relevant page
+    const act=document.querySelector('.pg.A');
+    if(act && (act.id==='pg-imgs'||act.id==='pg-pbr')) renderImgPage?.();
+  });
+}
+function saveDB(){
+  // Save data WITHOUT images to localStorage (images go to IndexedDB)
+  try{
+    const {images,...rest}=DB;
+    localStorage.setItem('rosyV4',JSON.stringify(rest));
+  } catch(e){
+    toast('Storage full — please export data!','err');
+  }
+}
 
 /* ─── PARSERS ──────────────────────────────── */
 function parseName(raw){
@@ -2330,12 +2357,19 @@ function saveCrop(){
   const canvas=document.getElementById('cropC'),d=canvas._d;if(!d||!_curImgKey)return;
   const cx=Math.max(0,(_cs.x-d.ox)/d.scale),cy=Math.max(0,(_cs.y-d.oy)/d.scale);
   const cw=Math.min(d.iw-cx,_cs.w/d.scale),ch=Math.min(d.ih-cy,_cs.h/d.scale);
-  const out=document.createElement('canvas');out.width=640;out.height=640;
-  out.getContext('2d').drawImage(_cropImg,cx,cy,cw,ch,0,0,640,640);
-  DB.images[_curImgKey]=out.toDataURL('image/jpeg',.82);
-  saveDB();toast('Photo saved! ✓','ok');cm('imgMod');stopCam();
-  if(_mkey===_curImgKey)openGroup(_mkey);
-  renderImgPage();
+  // Use 400x400 to save space (still crisp on screen)
+  const out=document.createElement('canvas');out.width=400;out.height=400;
+  out.getContext('2d').drawImage(_cropImg,cx,cy,cw,ch,0,0,400,400);
+  const dataUrl=out.toDataURL('image/jpeg',.78);
+  // Save to IndexedDB (unlimited storage)
+  savePhoto(_curImgKey, dataUrl).then(()=>{
+    DB.images[_curImgKey]=dataUrl; // keep in memory
+    saveDB(); // save meta (localStorage, no images)
+    toast('Photo saved! ✓','ok');
+    cm('imgMod');stopCam();
+    if(_mkey===_curImgKey)openGroup(_mkey);
+    renderImgPage();
+  });
 }
 
 /* ─── IMAGES PAGE ───────────────────────────── */
@@ -2781,9 +2815,34 @@ function expMaster(){if(!DB.master.length){toast('No data','err');return;}xlDl(D
 function expSales(){if(!DB.sales.length){toast('No sales','err');return;}const r=[];DB.sales.forEach(s=>(s.items||[]).forEach(i=>r.push({'Sale ID':s.id,'Date':new Date(s.date).toLocaleString('en-IN'),'Staff':s.staff||'','Customer':s.customer||'','Item':i.itemName,'Color':i.color,'Size':i.size,'Qty':i.qty,'Price':i.price,'Total':i.price*i.qty,'Payment':s.payment,'Payment Breakdown':s.payments?s.payments.map(p=>p.mode+' ₹'+p.amt).join(' + '):s.payment,'Sale Total':s.total})));xlDl(r,'ROSY_Sales');}
 function expOOS(){xlDl(DB.master.filter(i=>i.stock<=0).map(i=>({'D.no':i.dno,'Item Name':i.itemName,'Category':i.category,'Brand':i.brand,'Party':i.partyNo,'Cost/pc ₹':i.costPer})),'ROSY_OOS');}
 function xlDl(rows,name){const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(rows),name.replace('ROSY_','').slice(0,31));XLSX.writeFile(wb,name+'_'+new Date().toISOString().split('T')[0]+'.xlsx');toast('Exported!','ok');}
-function backupJ(){const b=new Blob([JSON.stringify({...DB,images:{}},null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='ROSY_Backup_'+new Date().toISOString().split('T')[0]+'.json';a.click();toast('Backup downloaded','ok');}
+function backupJ(){
+  exportAllPhotos().then(imgs=>{
+    const backupData={...DB, images:imgs};
+    const data=JSON.stringify(backupData,null,2);
+    const sizeMB=(data.length/1024/1024).toFixed(1);
+    const b=new Blob([data],{type:'application/json'});
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(b);
+    a.download='ROSY_Backup_'+new Date().toISOString().split('T')[0]+'.json';
+    a.click();
+    const photoCount=Object.keys(imgs||{}).length;
+    toast('Backup downloaded ('+sizeMB+'MB · '+photoCount+' photos)','ok');
+  });
+}
+function backupPhotosOnly(){
+  exportAllPhotos().then(imgs=>{
+    const photoCount=Object.keys(imgs||{}).length;
+    if(!photoCount){toast('No photos saved yet','err');return;}
+    const b=new Blob([JSON.stringify({images:imgs},null,2)],{type:'application/json'});
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(b);
+    a.download='ROSY_Photos_'+new Date().toISOString().split('T')[0]+'.json';
+    a.click();
+    toast('📷 Photos backup ('+photoCount+' photos)','ok');
+  });
+}
 function restoreJ(e){const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>{try{DB={...DB,...JSON.parse(ev.target.result)};saveDB();refreshAll();toast('Restored!','ok');}catch{toast('Invalid backup file','err');}};r.readAsText(f);}
-function updateDInfo(){document.getElementById('dInfo').innerHTML=`📦 ${DB.master.length.toLocaleString()} products &nbsp;·&nbsp; ⚠️ ${DB.oos.length} OOS &nbsp;·&nbsp; 💰 ${DB.sold.length} sold records &nbsp;·&nbsp; 🛒 ${DB.sales.length} app sales<br>${DB.lastImport?'🕐 Last import: '+new Date(DB.lastImport).toLocaleString('en-IN'):'No import yet'}`;}
+function updateDInfo(){const photoCount=Object.keys(DB.images||{}).length;const infoEl=document.getElementById('photoBackupInfo');if(infoEl)infoEl.textContent=photoCount?photoCount+' photos in library · tap ⬇️ Save Photos to backup':'No photos yet';document.getElementById('dInfo').innerHTML=`📦 ${DB.master.length.toLocaleString()} products &nbsp;·&nbsp; ⚠️ ${DB.oos.length} OOS &nbsp;·&nbsp; 💰 ${DB.sold.length} sold records &nbsp;·&nbsp; 🛒 ${DB.sales.length} app sales &nbsp;·&nbsp; 📷 ${photoCount} photos<br>${DB.lastImport?'🕐 Last import: '+new Date(DB.lastImport).toLocaleString('en-IN'):'No import yet'}`;}
 
 /* ─── NAV ───────────────────────────────────── */
 const TITLES={dash:'Dashboard',prod:'All Products',srch:'Search & Filter',pbr:'Party & Brand View',oos:'Out of Stock',soldinstock:'Sold Items (In Stock)',order:'Order Generator',sale:'New Sale',expenses:'Expenses',hist:'Sales History',rep:'Reports',data:'Import / Export',imgs:'Product Images',settings:'Settings'};
@@ -2811,6 +2870,30 @@ function gp(el){
     settings:()=>{renderSettingsPage();}};
   fn[id]?.();
   updateTopbarActions(id);
+}
+
+function restorePhotos(e){
+  const f=e.target.files[0]; if(!f) return;
+  const rd=new FileReader();
+  rd.onload=ev=>{
+    try{
+      const data=JSON.parse(ev.target.result);
+      const incoming=data.images||data;
+      const incomingCount=Object.keys(incoming).length;
+      if(!incomingCount){toast('No photos found in file','err');return;}
+      importAllPhotos(incoming).then(count=>{
+        DB.images={...(DB.images||{}),...incoming};
+        const total=Object.keys(DB.images||{}).length;
+        const infoEl=document.getElementById('photoBackupInfo');
+        if(infoEl) infoEl.textContent='✅ '+count+' photos loaded · '+total+' total in library';
+        toast('✅ '+count+' photos loaded into IndexedDB!','ok');
+        renderImgPage?.();
+      });
+    } catch(err){
+      toast('Invalid photos file','err');
+    }
+  };
+  rd.readAsText(f);
 }
 
 /* Init cascade dropdowns to show full lists when page first opens */
@@ -5174,6 +5257,96 @@ function renderPartyReturns(){
       <td style="color:var(--rose)">₹${i.costPer}</td>
     </tr>`).join('')}</tbody>
   </table></div>`;
+}
+
+/* ═══════════════════════════════════════════════
+   INDEXED DB — Photo Storage (unlimited)
+   Replaces localStorage for DB.images
+   DB name: rosyPhotos  Store: photos  Key: articleName
+═══════════════════════════════════════════════ */
+const IDB_NAME='rosyPhotos', IDB_STORE='photos', IDB_VER=1;
+
+function openPhotoDB(){
+  return new Promise((res,rej)=>{
+    const req=indexedDB.open(IDB_NAME,IDB_VER);
+    req.onupgradeneeded=e=>{
+      const db=e.target.result;
+      if(!db.objectStoreNames.contains(IDB_STORE))
+        db.createObjectStore(IDB_STORE);
+    };
+    req.onsuccess=e=>res(e.target.result);
+    req.onerror=e=>rej(e.target.error);
+  });
+}
+
+function savePhoto(key,dataUrl){
+  return openPhotoDB().then(db=>{
+    return new Promise((res,rej)=>{
+      const tx=db.transaction(IDB_STORE,'readwrite');
+      tx.objectStore(IDB_STORE).put(dataUrl,key);
+      tx.oncomplete=()=>res();
+      tx.onerror=e=>rej(e.target.error);
+    });
+  });
+}
+
+function deletePhoto(key){
+  return openPhotoDB().then(db=>{
+    return new Promise((res,rej)=>{
+      const tx=db.transaction(IDB_STORE,'readwrite');
+      tx.objectStore(IDB_STORE).delete(key);
+      tx.oncomplete=()=>res();
+      tx.onerror=e=>rej(e.target.error);
+    });
+  });
+}
+
+function loadAllPhotos(){
+  return openPhotoDB().then(db=>{
+    return new Promise((res,rej)=>{
+      const tx=db.transaction(IDB_STORE,'readonly');
+      const store=tx.objectStore(IDB_STORE);
+      const result={};
+      store.openCursor().onsuccess=e=>{
+        const cursor=e.target.result;
+        if(cursor){result[cursor.key]=cursor.value;cursor.continue();}
+        else res(result);
+      };
+      tx.onerror=e=>rej(e.target.error);
+    });
+  }).catch(()=>{
+    // Fallback: return images from DB if IndexedDB fails
+    return DB.images||{};
+  });
+}
+
+function exportAllPhotos(){
+  return loadAllPhotos();
+}
+
+function importAllPhotos(imagesObj){
+  // Save each photo to IndexedDB
+  const keys=Object.keys(imagesObj||{});
+  if(!keys.length) return Promise.resolve(0);
+  return openPhotoDB().then(db=>{
+    return new Promise((res,rej)=>{
+      const tx=db.transaction(IDB_STORE,'readwrite');
+      const store=tx.objectStore(IDB_STORE);
+      keys.forEach(k=>store.put(imagesObj[k],k));
+      tx.oncomplete=()=>res(keys.length);
+      tx.onerror=e=>rej(e.target.error);
+    });
+  });
+}
+
+function clearAllPhotos(){
+  return openPhotoDB().then(db=>{
+    return new Promise((res,rej)=>{
+      const tx=db.transaction(IDB_STORE,'readwrite');
+      tx.objectStore(IDB_STORE).clear();
+      tx.oncomplete=()=>res();
+    });
+  });
 }
 
 /* ─── INIT ──────────────────────────────────── */

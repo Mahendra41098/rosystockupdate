@@ -487,6 +487,33 @@ nav{flex:1;padding:6px 0;overflow-y:auto}
 
         <!-- SOLD ITEMS TAB -->
         <div id="pbrContent-sold" style="display:none">
+          <!-- Filters row -->
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;align-items:flex-end">
+            <input id="pbrSoldSearch" placeholder="🔍 Article, category, brand…" oninput="renderPartySold()" style="flex:2;min-width:150px">
+            <select id="pbrSoldGroup" onchange="renderPartySold()" style="flex:1;min-width:130px">
+              <option value="item">By Item (all variants)</option>
+              <option value="article">By Article (grouped)</option>
+              <option value="category">By Category</option>
+              <option value="brand">By Brand</option>
+            </select>
+            <select id="pbrSoldStock" onchange="renderPartySold()" style="flex:1;min-width:120px">
+              <option value="">All Stock Status</option>
+              <option value="in">Still In Stock</option>
+              <option value="out">Out of Stock</option>
+              <option value="low">Low Stock ≤3</option>
+            </select>
+            <select id="pbrSoldSort" onchange="renderPartySold()" style="flex:1;min-width:140px">
+              <option value="soldDesc">Most Sold First</option>
+              <option value="soldAsc">Least Sold First</option>
+              <option value="stockAsc">Lowest Stock First</option>
+              <option value="nameAsc">Name A→Z</option>
+              <option value="priceDesc">Highest Price First</option>
+            </select>
+            <button class="btn bg sm" onclick="clearPbrSoldFilters()" title="Clear filters">✕</button>
+          </div>
+          <!-- Summary strip -->
+          <div id="pbrSoldSummary"></div>
+          <!-- Results -->
           <div id="pbrSoldList"></div>
         </div>
 
@@ -5203,30 +5230,204 @@ function renderPartyArticles(){
 
 /* ── Sold Items for this party ── */
 function renderPartySold(){
-  const el = document.getElementById('pbrSoldList'); if(!el) return;
+  const el  = document.getElementById('pbrSoldList'); if(!el) return;
+  const sumEl= document.getElementById('pbrSoldSummary');
+  const q   = (document.getElementById('pbrSoldSearch')?.value||'').toLowerCase();
+  const grp = document.getElementById('pbrSoldGroup')?.value  || 'item';
+  const stk = document.getElementById('pbrSoldStock')?.value  || '';
+  const srt = document.getElementById('pbrSoldSort')?.value   || 'soldDesc';
+
   const soldMap = Object.fromEntries(DB.sold.map(s=>[s.itemName,s.salesQty]));
-  const items = DB.master.filter(i=>i.partyNo===_selParty && (soldMap[i.itemName]||0)>0)
-    .sort((a,b)=>(soldMap[b.itemName]||0)-(soldMap[a.itemName]||0));
-  if(!items.length){el.innerHTML='<div class="empty" style="padding:20px">No sold items for this party</div>';return;}
-  const totSold=items.reduce((s,i)=>s+(soldMap[i.itemName]||0),0);
-  el.innerHTML=`<div style="font-size:12px;color:var(--t2);margin-bottom:10px">${items.length} items · ${totSold} units sold</div>
-  <div class="tw"><table>
-    <thead><tr><th>Article</th><th>Category</th><th>Color</th><th>Size</th><th>Brand</th><th>Sold Qty</th><th>Cur.Stock</th><th>Sale ₹</th><th>Cost ₹</th></tr></thead>
-    <tbody>${items.map(i=>{
-      const sq=soldMap[i.itemName]||0;
-      return `<tr onclick="openGroup('${esc(i.article)}')" style="cursor:pointer" onmouseover="this.style.background='rgba(99,102,241,.05)'" onmouseout="this.style.background=''">
-        <td style="font-size:12px;font-weight:700">${i.article}</td>
-        <td><span class="bx bcat">${i.category}</span></td>
-        <td>${cswDot(i.color)}<span class="bx bclr">${i.color}</span></td>
-        <td><span class="bx bsz">${i.size}</span></td>
-        <td><span class="bx bbr">${i.brand}</span></td>
-        <td style="font-weight:700;color:var(--acc)">${sq}</td>
-        <td class="${i.stock<=0?'cr':i.stock<=3?'cy':'cg'}">${i.stock<=0?'OUT':i.stock}</td>
-        <td style="font-weight:700">₹${i.salePrice}</td>
-        <td style="color:var(--rose)">₹${i.costPer}</td>
-      </tr>`;
-    }).join('')}</tbody>
-  </table></div>`;
+
+  // Base: all items for this party that have been sold
+  let items = DB.master.filter(i=>{
+    if(i.partyNo!==_selParty) return false;
+    if(!soldMap[i.itemName])  return false;
+    if(q && !i.article.toLowerCase().includes(q) &&
+            !i.category.toLowerCase().includes(q) &&
+            !i.brand.toLowerCase().includes(q) &&
+            !i.itemName.toLowerCase().includes(q)) return false;
+    if(stk==='in'  && i.stock<=0) return false;
+    if(stk==='out' && i.stock>0)  return false;
+    if(stk==='low' && (i.stock<=0||i.stock>3)) return false;
+    return true;
+  });
+
+  // Sort
+  items = [...items].sort((a,b)=>{
+    const sa=soldMap[a.itemName]||0, sb=soldMap[b.itemName]||0;
+    if(srt==='soldDesc')  return sb-sa;
+    if(srt==='soldAsc')   return sa-sb;
+    if(srt==='stockAsc')  return a.stock-b.stock;
+    if(srt==='nameAsc')   return a.article.localeCompare(b.article);
+    if(srt==='priceDesc') return b.salePrice-a.salePrice;
+    return sb-sa;
+  });
+
+  if(!items.length){
+    el.innerHTML='<div class="empty" style="padding:24px">No sold items match the filters</div>';
+    if(sumEl) sumEl.innerHTML='';
+    return;
+  }
+
+  // Totals
+  const totalSoldQty  = items.reduce((s,i)=>s+(soldMap[i.itemName]||0),0);
+  const totalSoldMrp  = items.reduce((s,i)=>s+(soldMap[i.itemName]||0)*(i.mrp||i.salePrice),0);
+  const totalSoldCost = items.reduce((s,i)=>s+(soldMap[i.itemName]||0)*(i.costPer||0),0);
+  const totalCurStock = items.reduce((s,i)=>s+i.stock,0);
+
+  if(sumEl) sumEl.innerHTML=`<div style="display:flex;gap:10px;flex-wrap:wrap;background:var(--bg3);border-radius:9px;padding:9px 12px;margin-bottom:10px;font-size:12px">
+    <div><span style="color:var(--t3);font-size:10px;display:block;text-transform:uppercase">Items</span><strong>${items.length}</strong></div>
+    <div><span style="color:var(--t3);font-size:10px;display:block;text-transform:uppercase">Units Sold</span><strong style="color:var(--acc)">${totalSoldQty.toLocaleString()}</strong></div>
+    <div><span style="color:var(--t3);font-size:10px;display:block;text-transform:uppercase">Sold MRP Value</span><strong style="color:var(--grn)">₹${Math.round(totalSoldMrp).toLocaleString()}</strong></div>
+    <div><span style="color:var(--t3);font-size:10px;display:block;text-transform:uppercase">Sold Cost</span><strong style="color:var(--rose)">₹${Math.round(totalSoldCost).toLocaleString()}</strong></div>
+    <div><span style="color:var(--t3);font-size:10px;display:block;text-transform:uppercase">Current Stock</span><strong class="${totalCurStock<=0?'cr':totalCurStock<=10?'cy':'cg'}">${totalCurStock}</strong></div>
+  </div>`;
+
+  // ── Render based on grouping ──
+  if(grp==='item'){
+    // Flat table: every size/color variant as its own row
+    el.innerHTML=`<div class="tw"><table>
+      <thead><tr>
+        <th>Article</th><th>Category</th><th>Brand</th><th>Color</th><th>Size</th>
+        <th>D.no</th><th>Sold Qty</th><th>Cur.Stock</th>
+        <th>Sale ₹</th><th>Cost ₹</th><th>MRP ₹</th><th>Sold MRP ₹</th>
+      </tr></thead>
+      <tbody>${items.map(i=>{
+        const sq=soldMap[i.itemName]||0;
+        const stkCls=i.stock<=0?'cr':i.stock<=3?'cy':'cg';
+        return `<tr onclick="openGroup('${esc(i.article)}')" style="cursor:pointer" onmouseover="this.style.background='rgba(99,102,241,.05)'" onmouseout="this.style.background=''">
+          <td style="font-size:12px;font-weight:700">${i.article}</td>
+          <td><span class="bx bcat">${i.category}</span></td>
+          <td><span class="bx bbr">${i.brand}</span></td>
+          <td>${cswDot(i.color)}<span class="bx bclr">${i.color}</span></td>
+          <td><span class="bx bsz">${i.size}</span></td>
+          <td style="font-size:10px;font-family:monospace;color:var(--cyn)">${i.dno}</td>
+          <td style="font-weight:800;color:var(--acc)">${sq}</td>
+          <td class="${stkCls}">${i.stock<=0?'OUT':i.stock}</td>
+          <td style="font-weight:700">₹${i.salePrice}</td>
+          <td style="color:var(--rose)">₹${i.costPer}</td>
+          <td style="color:var(--t2)">₹${i.mrp||i.salePrice}</td>
+          <td style="font-weight:700;color:var(--grn)">₹${Math.round(sq*(i.mrp||i.salePrice)).toLocaleString()}</td>
+        </tr>`;
+      }).join('')}</tbody>
+      <tfoot><tr style="background:var(--bg3);font-weight:700">
+        <td colspan="6" style="padding:8px 10px">TOTAL (${items.length} items)</td>
+        <td style="color:var(--acc)">${totalSoldQty}</td>
+        <td class="${totalCurStock<=0?'cr':'cg'}">${totalCurStock}</td>
+        <td colspan="3"></td>
+        <td style="color:var(--grn)">₹${Math.round(totalSoldMrp).toLocaleString()}</td>
+      </tfoot>
+    </table></div>`;
+
+  } else if(grp==='article'){
+    // Group by article — show color×size matrix within each article
+    const artMap={};
+    items.forEach(i=>{
+      if(!artMap[i.article])artMap[i.article]={items:[],sold:0,stock:0,category:i.category,brand:i.brand,salePrice:i.salePrice,mrp:i.mrp||i.salePrice};
+      artMap[i.article].items.push(i);
+      artMap[i.article].sold +=(soldMap[i.itemName]||0);
+      artMap[i.article].stock+=i.stock;
+    });
+    const rows=Object.entries(artMap).sort((a,b)=>{
+      if(srt==='soldDesc')return b[1].sold-a[1].sold;
+      if(srt==='nameAsc') return a[0].localeCompare(b[0]);
+      return b[1].sold-a[1].sold;
+    });
+    const img_store=DB.images||{};
+    el.innerHTML=rows.map(([art,d])=>{
+      const img=img_store[art];
+      const stkCls=d.stock<=0?'cr':d.stock<=3?'cy':'cg';
+      // Color × Size matrix
+      const colorMap={};
+      d.items.forEach(i=>{
+        if(!colorMap[i.color])colorMap[i.color]={};
+        colorMap[i.color][i.size]={stock:i.stock,sold:soldMap[i.itemName]||0,item:i};
+      });
+      const allSizes=[...new Set(d.items.map(i=>i.size))].sort();
+      return `<div style="background:var(--card);border:1px solid var(--bdr);border-radius:12px;overflow:hidden;margin-bottom:10px">
+        <div style="display:grid;grid-template-columns:90px 1fr;gap:0">
+          <div style="height:100%;min-height:90px;background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:28px;overflow:hidden">
+            ${img?`<img src="${img}" style="width:100%;height:100%;object-fit:cover">`:'👗'}
+          </div>
+          <div style="padding:10px 12px">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:4px">
+              <div>
+                <div style="font-size:13px;font-weight:800;cursor:pointer;color:var(--acc)" onclick="openGroup('${esc(art)}')">${art}</div>
+                <div style="font-size:11px;color:var(--t3)"><span class="bx bcat">${d.category}</span> <span class="bx bbr">${d.brand}</span></div>
+              </div>
+              <div style="text-align:right">
+                <div style="font-size:14px;font-weight:800;color:var(--acc)">${d.sold} sold</div>
+                <div class="${stkCls}" style="font-size:11px">${d.stock<=0?'All Out':d.stock+' in stock'}</div>
+              </div>
+            </div>
+            <!-- Color × Size sold/stock pills -->
+            ${Object.entries(colorMap).map(([clr,sizes])=>`
+              <div style="margin-bottom:5px">
+                <div style="font-size:10px;color:var(--t3);margin-bottom:3px;display:flex;align-items:center;gap:4px">${cswDot(clr,10)}<span>${clr}</span></div>
+                <div style="display:flex;gap:4px;flex-wrap:wrap">
+                  ${allSizes.map(sz=>{
+                    const sd=sizes[sz];
+                    if(!sd)return `<div style="opacity:.25;font-size:10px;padding:3px 7px;border-radius:5px;background:var(--bg3);color:var(--t3)">${sz}<br>—</div>`;
+                    const hasSold=sd.sold>0, hasStock=sd.stock>0;
+                    return `<div onclick="addToOrderCart(${JSON.stringify(sd.item).replace(/"/g,'&quot;')},1)" style="font-size:10px;padding:4px 8px;border-radius:6px;cursor:pointer;text-align:center;background:${hasSold?'rgba(99,102,241,.12)':'var(--bg3)'};border:1px solid ${hasSold?'var(--acc)':'var(--bdr)'}" title="Click to add to Order Cart">
+                      <div style="font-weight:800">${sz}</div>
+                      ${hasSold?`<div style="color:var(--acc);font-weight:700">📤${sd.sold}</div>`:''}
+                      <div class="${hasStock?sd.stock<=3?'cy':'cg':'cr'}" style="font-size:9px">${hasStock?sd.stock+'✓':'OUT'}</div>
+                    </div>`;
+                  }).join('')}
+                </div>
+              </div>`).join('')}
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+
+  } else {
+    // Group by category or brand
+    const groupKey = grp==='category'?'category':'brand';
+    const gMap={};
+    items.forEach(i=>{
+      const k=i[groupKey]||'—';
+      if(!gMap[k])gMap[k]={items:[],sold:0,stock:0,soldMrp:0};
+      gMap[k].items.push(i);
+      gMap[k].sold +=(soldMap[i.itemName]||0);
+      gMap[k].stock+=i.stock;
+      gMap[k].soldMrp+=(soldMap[i.itemName]||0)*(i.mrp||i.salePrice);
+    });
+    const gRows=Object.entries(gMap).sort((a,b)=>b[1].sold-a[1].sold);
+    el.innerHTML=`<div class="tw"><table>
+      <thead><tr>
+        <th>${grp==='category'?'Category':'Brand'}</th>
+        <th>Variants</th><th>Units Sold</th><th>Cur.Stock</th>
+        <th>Sold MRP ₹</th><th>Avg Sale ₹</th>
+      </tr></thead>
+      <tbody>${gRows.map(([k,d])=>{
+        const avgSale=d.items.length?Math.round(d.items.reduce((s,i)=>s+i.salePrice,0)/d.items.length):0;
+        return`<tr onclick="document.getElementById('pbrSoldSearch').value='${esc(k)}';renderPartySold()" style="cursor:pointer" onmouseover="this.style.background='rgba(99,102,241,.05)'" onmouseout="this.style.background=''">
+          <td>${grp==='category'?`<span class="bx bcat">${k}</span>`:`<span class="bx bbr">${k}</span>`}</td>
+          <td>${d.items.length}</td>
+          <td style="font-weight:800;color:var(--acc)">${d.sold}</td>
+          <td class="${d.stock<=0?'cr':d.stock<=3?'cy':'cg'}">${d.stock<=0?'All Out':d.stock}</td>
+          <td style="color:var(--grn);font-weight:700">₹${Math.round(d.soldMrp).toLocaleString()}</td>
+          <td>₹${avgSale}</td>
+        </tr>`;
+      }).join('')}</tbody>
+      <tfoot><tr style="background:var(--bg3);font-weight:700">
+        <td colspan="2" style="padding:8px 10px">TOTAL (${gRows.length} groups)</td>
+        <td style="color:var(--acc)">${totalSoldQty}</td>
+        <td class="${totalCurStock<=0?'cr':'cg'}">${totalCurStock}</td>
+        <td style="color:var(--grn)">₹${Math.round(totalSoldMrp).toLocaleString()}</td>
+        <td></td>
+      </tfoot>
+    </table></div>`;
+  }
+}
+
+function clearPbrSoldFilters(){
+  ['pbrSoldSearch'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  ['pbrSoldGroup','pbrSoldStock','pbrSoldSort'].forEach(id=>{const el=document.getElementById(id);if(el)el.selectedIndex=0;});
+  renderPartySold();
 }
 
 /* ── Purchase Returns for this party ── */

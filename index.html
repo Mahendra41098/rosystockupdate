@@ -299,6 +299,7 @@ nav{flex:1;padding:6px 0;overflow-y:auto}
     <div class="ni" data-pg="rep" onclick="gp(this)"><span class="ic">📈</span><span class="lb">Reports</span></div>
     <div class="ns">Data</div>
     <div class="ni" data-pg="data" onclick="gp(this)"><span class="ic">📁</span><span class="lb">Import / Export</span></div>
+    <div class="ni" data-pg="barcode" onclick="gp(this)"><span class="ic">🏷️</span><span class="lb">Barcode / Label</span></div>
     <div class="ni" data-pg="settings" onclick="gp(this)"><span class="ic">⚙️</span><span class="lb">Settings</span></div>
     <div class="ni" data-pg="imgs" onclick="gp(this)"><span class="ic">🖼️</span><span class="lb">Product Images</span></div>
   </nav>
@@ -491,26 +492,34 @@ nav{flex:1;padding:6px 0;overflow-y:auto}
           <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;align-items:flex-end">
             <input id="pbrSoldSearch" placeholder="🔍 Article, category, brand…" oninput="renderPartySold()" style="flex:2;min-width:150px">
             <select id="pbrSoldGroup" onchange="renderPartySold()" style="flex:1;min-width:130px">
-              <option value="item">By Item (all variants)</option>
-              <option value="article">By Article (grouped)</option>
+              <option value="article">By Article (cards)</option>
+              <option value="item">By Item (flat table)</option>
               <option value="category">By Category</option>
               <option value="brand">By Brand</option>
             </select>
+            <select id="pbrSoldCat" onchange="renderPartySold()" style="flex:1;min-width:130px">
+              <option value="">All Categories</option>
+            </select>
+            <select id="pbrSoldBrand" onchange="renderPartySold()" style="flex:1;min-width:120px">
+              <option value="">All Brands</option>
+            </select>
             <select id="pbrSoldStock" onchange="renderPartySold()" style="flex:1;min-width:120px">
-              <option value="">All Stock Status</option>
+              <option value="">All Stock</option>
               <option value="in">Still In Stock</option>
               <option value="out">Out of Stock</option>
-              <option value="low">Low Stock ≤3</option>
+              <option value="low">Low ≤3</option>
             </select>
-            <select id="pbrSoldSort" onchange="renderPartySold()" style="flex:1;min-width:140px">
-              <option value="soldDesc">Most Sold First</option>
-              <option value="soldAsc">Least Sold First</option>
-              <option value="stockAsc">Lowest Stock First</option>
+            <select id="pbrSoldSort" onchange="renderPartySold()" style="flex:1;min-width:130px">
+              <option value="soldDesc">Most Sold</option>
+              <option value="soldAsc">Least Sold</option>
+              <option value="stockAsc">Low Stock First</option>
               <option value="nameAsc">Name A→Z</option>
-              <option value="priceDesc">Highest Price First</option>
+              <option value="priceDesc">Highest Price</option>
             </select>
-            <button class="btn bg sm" onclick="clearPbrSoldFilters()" title="Clear filters">✕</button>
+            <button class="btn bg sm" onclick="clearPbrSoldFilters()">✕</button>
           </div>
+          <!-- Category chip strip (populated dynamically) -->
+          <div id="pbrSoldCatChips" style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px"></div>
           <!-- Summary strip -->
           <div id="pbrSoldSummary"></div>
           <!-- Results -->
@@ -918,6 +927,69 @@ nav{flex:1;padding:6px 0;overflow-y:auto}
       </div>
       <div class="ri" id="imgInfo"></div>
       <div id="imgGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:10px"></div>
+    </div>
+
+    <!-- BARCODE / LABEL EXPORT -->
+    <div class="pg" id="pg-barcode">
+      <div style="display:grid;grid-template-columns:300px 1fr;gap:16px">
+
+        <!-- LEFT: Search & Select -->
+        <div style="background:var(--card);border:1px solid var(--bdr);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:10px">
+          <div style="font-size:13px;font-weight:700">🔍 Select Items</div>
+
+          <!-- Article search -->
+          <div>
+            <label style="font-size:11px;color:var(--t3);font-weight:600;display:block;margin-bottom:4px">Search Article / Item</label>
+            <input id="bcSearch" placeholder="Type article, color, brand, D.no…" oninput="bcSearchItems()" autocomplete="off">
+            <div id="bcSearchResults" style="max-height:200px;overflow-y:auto;border:1px solid var(--bdr);border-radius:8px;margin-top:4px;display:none;background:var(--card)"></div>
+          </div>
+
+          <!-- Filters -->
+          <div style="display:flex;gap:7px">
+            <select id="bcParty" onchange="bcSearchItems()" style="flex:1"><option value="">All Parties</option></select>
+            <select id="bcBrand" onchange="bcSearchItems()" style="flex:1"><option value="">All Brands</option></select>
+          </div>
+          <select id="bcCategory" onchange="bcSearchItems()"><option value="">All Categories</option></select>
+          <select id="bcStockFilter" onchange="bcSearchItems()">
+            <option value="">All Stock</option>
+            <option value="in">In Stock Only</option>
+            <option value="out">Out of Stock</option>
+          </select>
+
+          <!-- Quick add buttons -->
+          <div style="display:flex;gap:7px;flex-wrap:wrap">
+            <button class="btn bg sm" onclick="bcAddAllFiltered()" style="flex:1;justify-content:center">+ Add All Filtered</button>
+            <button class="btn bg sm" onclick="bcClear()" style="flex:1;justify-content:center">🗑️ Clear All</button>
+          </div>
+
+          <!-- Export options -->
+          <hr style="border:none;border-top:1px solid var(--bdr)">
+          <div style="font-size:12px;font-weight:700;color:var(--t2)">Export Options</div>
+          <div style="display:flex;flex-direction:column;gap:7px">
+            <button class="btn bp" onclick="bcExportExcel()" style="justify-content:center">📊 Export to Excel</button>
+            <button class="btn bg" onclick="bcPrintLabels()" style="justify-content:center">🖨️ Print Labels (A4)</button>
+          </div>
+          <div style="font-size:11px;color:var(--t3)" id="bcExportInfo"></div>
+        </div>
+
+        <!-- RIGHT: Selected items preview -->
+        <div style="background:var(--card);border:1px solid var(--bdr);border-radius:12px;overflow:hidden;display:flex;flex-direction:column">
+          <div style="padding:12px 16px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;gap:10px">
+            <span style="font-size:13px;font-weight:700;flex:1">Selected Items <span id="bcCount" class="bx bbr" style="font-size:11px">0</span></span>
+            <button class="btn bg sm" onclick="bcSelectAll(true)">☑ All</button>
+            <button class="btn bg sm" onclick="bcSelectAll(false)">☐ None</button>
+          </div>
+          <div style="flex:1;overflow-y:auto" id="bcTable">
+            <div class="empty" style="padding:30px">
+              <div style="font-size:32px;margin-bottom:8px">🏷️</div>
+              <p>Search and add items to generate barcode export</p>
+              <p style="font-size:11px;color:var(--t3);margin-top:8px">Excel format: SKU · Code · MRP · Qty · D.no · Category · Barcode</p>
+            </div>
+          </div>
+          <div style="padding:9px 14px;border-top:1px solid var(--bdr);font-size:11px;color:var(--t3)" id="bcFooter"></div>
+        </div>
+
+      </div>
     </div>
 
     <!-- SETTINGS -->
@@ -1965,6 +2037,9 @@ function showStep2(){
   document.getElementById('pbr-step2').style.display='block';
   document.getElementById('pbr-step3').style.display='none';
   document.getElementById('selPartyLabel').textContent='Party '+_selParty;
+  // Reset sold tab filters when party changes
+  ['pbrSoldCat','pbrSoldBrand','pbrSoldStock','pbrSoldSort'].forEach(id=>{const el=document.getElementById(id);if(el){el.innerHTML=el.tagName==='SELECT'?'<option value="">All</option>':'';el.selectedIndex=0;}});
+  const chipsEl=document.getElementById('pbrSoldCatChips');if(chipsEl)chipsEl.innerHTML='';
   // Reset to Brands tab
   _pbrTab='brands';
   document.querySelectorAll('[id^="pbrTab-"]').forEach(b=>b.classList.remove('A'));
@@ -2872,7 +2947,7 @@ function restoreJ(e){const f=e.target.files[0];if(!f)return;const r=new FileRead
 function updateDInfo(){const photoCount=Object.keys(DB.images||{}).length;const infoEl=document.getElementById('photoBackupInfo');if(infoEl)infoEl.textContent=photoCount?photoCount+' photos in library · tap ⬇️ Save Photos to backup':'No photos yet';document.getElementById('dInfo').innerHTML=`📦 ${DB.master.length.toLocaleString()} products &nbsp;·&nbsp; ⚠️ ${DB.oos.length} OOS &nbsp;·&nbsp; 💰 ${DB.sold.length} sold records &nbsp;·&nbsp; 🛒 ${DB.sales.length} app sales &nbsp;·&nbsp; 📷 ${photoCount} photos<br>${DB.lastImport?'🕐 Last import: '+new Date(DB.lastImport).toLocaleString('en-IN'):'No import yet'}`;}
 
 /* ─── NAV ───────────────────────────────────── */
-const TITLES={dash:'Dashboard',prod:'All Products',srch:'Search & Filter',pbr:'Party & Brand View',oos:'Out of Stock',soldinstock:'Sold Items (In Stock)',order:'Order Generator',sale:'New Sale',expenses:'Expenses',hist:'Sales History',rep:'Reports',data:'Import / Export',imgs:'Product Images',settings:'Settings'};
+const TITLES={dash:'Dashboard',barcode:'Barcode / Label Export',prod:'All Products',srch:'Search & Filter',pbr:'Party & Brand View',oos:'Out of Stock',soldinstock:'Sold Items (In Stock)',order:'Order Generator',sale:'New Sale',expenses:'Expenses',hist:'Sales History',rep:'Reports',data:'Import / Export',imgs:'Product Images',settings:'Settings'};
 function gp(el){
   const id=el.dataset.pg;
   // Record history for back navigation
@@ -2894,6 +2969,7 @@ function gp(el){
     expenses:()=>{initExpenseForm();renderExpenses();renderExpChart();},
     hist:renderHist,rep:renderRep,data:updateDInfo,
     imgs:()=>{renderImgPage();initImgFilters();},
+    barcode:()=>{bcInit();},
     settings:()=>{renderSettingsPage();}};
   fn[id]?.();
   updateTopbarActions(id);
@@ -5233,16 +5309,49 @@ function renderPartySold(){
   const el  = document.getElementById('pbrSoldList'); if(!el) return;
   const sumEl= document.getElementById('pbrSoldSummary');
   const q   = (document.getElementById('pbrSoldSearch')?.value||'').toLowerCase();
-  const grp = document.getElementById('pbrSoldGroup')?.value  || 'item';
+  const grp = document.getElementById('pbrSoldGroup')?.value  || 'article';
+  const cat = document.getElementById('pbrSoldCat')?.value    || '';
+  const brd = document.getElementById('pbrSoldBrand')?.value  || '';
   const stk = document.getElementById('pbrSoldStock')?.value  || '';
   const srt = document.getElementById('pbrSoldSort')?.value   || 'soldDesc';
 
   const soldMap = Object.fromEntries(DB.sold.map(s=>[s.itemName,s.salesQty]));
 
-  // Base: all items for this party that have been sold
+  // All sold items for this party (unfiltered) — for populating dropdowns
+  const allPartyItems = DB.master.filter(i=>i.partyNo===_selParty && soldMap[i.itemName]);
+  const availCats  = [...new Set(allPartyItems.map(i=>i.category))].sort();
+  const availBrands= [...new Set(allPartyItems.filter(i=>!cat||i.category===cat).map(i=>i.brand))].sort();
+
+  // Populate category dropdown
+  const catSel=document.getElementById('pbrSoldCat');
+  if(catSel && catSel.options.length<=1){
+    availCats.forEach(c=>catSel.add(new Option(c,c)));
+  }
+  // Rebuild brand dropdown based on selected category
+  const brdSel=document.getElementById('pbrSoldBrand');
+  if(brdSel){
+    const curBrd=brdSel.value;
+    brdSel.innerHTML='<option value="">All Brands</option>';
+    availBrands.forEach(b=>brdSel.add(new Option(b,b)));
+    if(availBrands.includes(curBrd)) brdSel.value=curBrd;
+  }
+
+  // Render category chip strip
+  const chipsEl=document.getElementById('pbrSoldCatChips');
+  if(chipsEl){
+    chipsEl.innerHTML=`<span style="font-size:10px;color:var(--t3);font-weight:600;line-height:24px;margin-right:4px">Category:</span>`
+      +[{v:'',l:'All'},...availCats.map(c=>({v:c,l:c}))].map(({v,l})=>`
+        <button onclick="document.getElementById('pbrSoldCat').value='${esc(v)}';rebuildPbrBrandDropdown();renderPartySold()"
+          style="padding:3px 10px;border-radius:20px;border:1.5px solid ${cat===v?'var(--acc)':'var(--bdr)'};background:${cat===v?'rgba(99,102,241,.15)':'var(--bg3)'};color:${cat===v?'var(--acc)':'var(--t2)'};font-size:11px;font-weight:${cat===v?'700':'500'};cursor:pointer;transition:all .15s"
+          onmouseover="this.style.borderColor='var(--acc)'" onmouseout="if('${esc(v)}'!=='${esc(cat)}')this.style.borderColor='var(--bdr)'">${l}</button>`
+      ).join('');
+  }
+
   let items = DB.master.filter(i=>{
     if(i.partyNo!==_selParty) return false;
     if(!soldMap[i.itemName])  return false;
+    if(cat && i.category!==cat) return false;
+    if(brd && i.brand!==brd)    return false;
     if(q && !i.article.toLowerCase().includes(q) &&
             !i.category.toLowerCase().includes(q) &&
             !i.brand.toLowerCase().includes(q) &&
@@ -5253,7 +5362,6 @@ function renderPartySold(){
     return true;
   });
 
-  // Sort
   items = [...items].sort((a,b)=>{
     const sa=soldMap[a.itemName]||0, sb=soldMap[b.itemName]||0;
     if(srt==='soldDesc')  return sb-sa;
@@ -5265,37 +5373,120 @@ function renderPartySold(){
   });
 
   if(!items.length){
-    el.innerHTML='<div class="empty" style="padding:24px">No sold items match the filters</div>';
+    el.innerHTML='<div class="empty" style="padding:24px">No sold items match filters</div>';
     if(sumEl) sumEl.innerHTML='';
     return;
   }
 
-  // Totals
   const totalSoldQty  = items.reduce((s,i)=>s+(soldMap[i.itemName]||0),0);
   const totalSoldMrp  = items.reduce((s,i)=>s+(soldMap[i.itemName]||0)*(i.mrp||i.salePrice),0);
   const totalSoldCost = items.reduce((s,i)=>s+(soldMap[i.itemName]||0)*(i.costPer||0),0);
   const totalCurStock = items.reduce((s,i)=>s+i.stock,0);
+  const grossProfit   = totalSoldMrp - totalSoldCost;
 
   if(sumEl) sumEl.innerHTML=`<div style="display:flex;gap:10px;flex-wrap:wrap;background:var(--bg3);border-radius:9px;padding:9px 12px;margin-bottom:10px;font-size:12px">
-    <div><span style="color:var(--t3);font-size:10px;display:block;text-transform:uppercase">Items</span><strong>${items.length}</strong></div>
-    <div><span style="color:var(--t3);font-size:10px;display:block;text-transform:uppercase">Units Sold</span><strong style="color:var(--acc)">${totalSoldQty.toLocaleString()}</strong></div>
-    <div><span style="color:var(--t3);font-size:10px;display:block;text-transform:uppercase">Sold MRP Value</span><strong style="color:var(--grn)">₹${Math.round(totalSoldMrp).toLocaleString()}</strong></div>
-    <div><span style="color:var(--t3);font-size:10px;display:block;text-transform:uppercase">Sold Cost</span><strong style="color:var(--rose)">₹${Math.round(totalSoldCost).toLocaleString()}</strong></div>
-    <div><span style="color:var(--t3);font-size:10px;display:block;text-transform:uppercase">Current Stock</span><strong class="${totalCurStock<=0?'cr':totalCurStock<=10?'cy':'cg'}">${totalCurStock}</strong></div>
+    <div><span style="font-size:10px;color:var(--t3);text-transform:uppercase;display:block">Items</span><strong>${items.length}</strong></div>
+    <div><span style="font-size:10px;color:var(--t3);text-transform:uppercase;display:block">Units Sold</span><strong style="color:var(--acc)">${totalSoldQty}</strong></div>
+    <div><span style="font-size:10px;color:var(--t3);text-transform:uppercase;display:block">Sold MRP</span><strong style="color:var(--grn)">₹${Math.round(totalSoldMrp).toLocaleString()}</strong></div>
+    <div><span style="font-size:10px;color:var(--t3);text-transform:uppercase;display:block">Sold Cost</span><strong style="color:var(--rose)">₹${Math.round(totalSoldCost).toLocaleString()}</strong></div>
+    <div><span style="font-size:10px;color:var(--t3);text-transform:uppercase;display:block">Gross Profit</span><strong style="color:${grossProfit>=0?'var(--grn)':'var(--red)'}">${grossProfit>=0?'+':''}₹${Math.round(grossProfit).toLocaleString()}</strong></div>
+    <div><span style="font-size:10px;color:var(--t3);text-transform:uppercase;display:block">Cur.Stock</span><strong class="${totalCurStock<=0?'cr':totalCurStock<=10?'cy':'cg'}">${totalCurStock}</strong></div>
   </div>`;
 
-  // ── Render based on grouping ──
-  if(grp==='item'){
-    // Flat table: every size/color variant as its own row
+  // ── BY ARTICLE: Rich card grid with photo + color×size sold/stock matrix ──
+  if(grp==='article'){
+    const artMap={};
+    items.forEach(i=>{
+      const k=i.article;
+      if(!artMap[k])artMap[k]={items:[],sold:0,stock:0,cat:i.category,brand:i.brand,salePrice:i.salePrice,mrp:i.mrp||i.salePrice,costPer:i.costPer};
+      artMap[k].items.push(i);
+      artMap[k].sold +=(soldMap[i.itemName]||0);
+      artMap[k].stock+=i.stock;
+    });
+    const artRows=Object.entries(artMap).sort((a,b)=>b[1].sold-a[1].sold);
+
+    el.innerHTML=`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px">${artRows.map(([art,d])=>{
+      const img=DB.images[art];
+      const stkCls=d.stock<=0?'cr':d.stock<=3?'cy':'cg';
+      const soldPct=d.sold+d.stock>0?Math.round(d.sold/(d.sold+d.stock)*100):0;
+      // Build color × size matrix with sold qty + stock
+      const colorMap={};
+      d.items.forEach(i=>{
+        const c=i.color||'—';
+        if(!colorMap[c])colorMap[c]={sizes:{},soldTotal:0};
+        colorMap[c].sizes[i.size||'F']={stock:i.stock,sold:soldMap[i.itemName]||0,dno:i.dno,item:i};
+        colorMap[c].soldTotal+=(soldMap[i.itemName]||0);
+      });
+      const allSizes=[...new Set(d.items.map(i=>i.size||'F'))].sort();
+
+      return `<div style="background:var(--card);border:1px solid var(--bdr);border-radius:13px;overflow:hidden;transition:box-shadow .18s" onmouseover="this.style.boxShadow='0 4px 18px rgba(0,0,0,.12)'" onmouseout="this.style.boxShadow=''">
+        <!-- Header: photo + article info -->
+        <div style="display:grid;grid-template-columns:80px 1fr;gap:0">
+          <div style="height:80px;background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:28px;overflow:hidden;cursor:pointer" onclick="openGroup('${esc(art)}')">
+            ${img?`<img src="${img}" style="width:100%;height:100%;object-fit:cover">`:'👗'}
+          </div>
+          <div style="padding:9px 12px">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between">
+              <div>
+                <div style="font-size:13px;font-weight:800;color:var(--acc);cursor:pointer" onclick="openGroup('${esc(art)}')">${art}</div>
+                <div style="font-size:10px;color:var(--t3)"><span class="bx bcat" style="font-size:9px">${d.cat}</span> <span class="bx bbr" style="font-size:9px">${d.brand}</span></div>
+              </div>
+              <div style="text-align:right">
+                <div style="font-size:16px;font-weight:900;color:var(--acc)">${d.sold}</div>
+                <div style="font-size:9px;color:var(--t3)">sold</div>
+              </div>
+            </div>
+            <!-- Stock + sold bar -->
+            <div style="margin-top:5px">
+              <div style="display:flex;justify-content:space-between;font-size:10px;margin-bottom:2px">
+                <span class="${stkCls}">${d.stock<=0?'All Sold Out':d.stock+' left'}</span>
+                <span style="color:var(--t3)">₹${d.mrp} MRP</span>
+              </div>
+              <div style="height:4px;background:var(--bg3);border-radius:3px;overflow:hidden">
+                <div style="height:100%;background:var(--acc);width:${soldPct}%;border-radius:3px"></div>
+              </div>
+              <div style="font-size:9px;color:var(--t3);margin-top:1px">${soldPct}% sold · Cost ₹${d.costPer}</div>
+            </div>
+          </div>
+        </div>
+        <!-- Color × Size Matrix -->
+        <div style="padding:8px 12px;border-top:1px solid var(--bdr);background:var(--bg3)">
+          ${Object.entries(colorMap).map(([clr,cd])=>`
+            <div style="margin-bottom:6px">
+              <div style="font-size:10px;font-weight:700;color:var(--t3);margin-bottom:4px;display:flex;align-items:center;gap:4px">
+                ${cswDot(clr,9)}<span>${clr}</span>
+                <span style="color:var(--acc);font-size:10px;font-weight:700">📤${cd.soldTotal}</span>
+              </div>
+              <div style="display:flex;flex-wrap:wrap;gap:4px">
+                ${allSizes.map(sz=>{
+                  const sd=cd.sizes[sz];
+                  if(!sd)return `<div style="opacity:.2;padding:3px 7px;border-radius:5px;border:1px solid var(--bdr);font-size:10px;color:var(--t3)">${sz}</div>`;
+                  const hasSold=sd.sold>0, hasStk=sd.stock>0;
+                  const bg=hasSold&&hasStk?'rgba(99,102,241,.12)':hasSold?'rgba(239,68,68,.08)':hasStk?'rgba(16,185,129,.1)':'var(--bg3)';
+                  const bdr2=hasSold&&hasStk?'rgba(99,102,241,.4)':hasSold?'rgba(239,68,68,.3)':hasStk?'rgba(16,185,129,.35)':'var(--bdr)';
+                  return `<div onclick="addToOrderCart(${JSON.stringify(sd.item).replace(/"/g,'&quot;')},1)" title="D.no:${sd.dno} · Click=Add to Order" style="padding:4px 8px;border-radius:6px;border:1.5px solid ${bdr2};background:${bg};cursor:pointer;text-align:center;min-width:40px">
+                    <div style="font-size:11px;font-weight:800">${sz}</div>
+                    ${hasSold?`<div style="font-size:9px;font-weight:700;color:var(--acc)">📤${sd.sold}</div>`:''}
+                    <div style="font-size:9px;color:${hasStk?'var(--grn)':'var(--red)'}">${hasStk?sd.stock+'✓':'OUT'}</div>
+                  </div>`;
+                }).join('')}
+              </div>
+            </div>`).join('')}
+        </div>
+      </div>`;
+    }).join('')}</div>`;
+
+  // ── BY ITEM: Full detail flat table ──
+  } else if(grp==='item'){
     el.innerHTML=`<div class="tw"><table>
       <thead><tr>
-        <th>Article</th><th>Category</th><th>Brand</th><th>Color</th><th>Size</th>
-        <th>D.no</th><th>Sold Qty</th><th>Cur.Stock</th>
+        <th>Article</th><th>Category</th><th>Brand</th>
+        <th>Color</th><th>Size</th><th>D.no</th>
+        <th>Sold</th><th>Stock</th>
         <th>Sale ₹</th><th>Cost ₹</th><th>MRP ₹</th><th>Sold MRP ₹</th>
       </tr></thead>
       <tbody>${items.map(i=>{
         const sq=soldMap[i.itemName]||0;
-        const stkCls=i.stock<=0?'cr':i.stock<=3?'cy':'cg';
         return `<tr onclick="openGroup('${esc(i.article)}')" style="cursor:pointer" onmouseover="this.style.background='rgba(99,102,241,.05)'" onmouseout="this.style.background=''">
           <td style="font-size:12px;font-weight:700">${i.article}</td>
           <td><span class="bx bcat">${i.category}</span></td>
@@ -5304,15 +5495,15 @@ function renderPartySold(){
           <td><span class="bx bsz">${i.size}</span></td>
           <td style="font-size:10px;font-family:monospace;color:var(--cyn)">${i.dno}</td>
           <td style="font-weight:800;color:var(--acc)">${sq}</td>
-          <td class="${stkCls}">${i.stock<=0?'OUT':i.stock}</td>
+          <td class="${i.stock<=0?'cr':i.stock<=3?'cy':'cg'}">${i.stock<=0?'OUT':i.stock}</td>
           <td style="font-weight:700">₹${i.salePrice}</td>
           <td style="color:var(--rose)">₹${i.costPer}</td>
-          <td style="color:var(--t2)">₹${i.mrp||i.salePrice}</td>
+          <td>₹${i.mrp||i.salePrice}</td>
           <td style="font-weight:700;color:var(--grn)">₹${Math.round(sq*(i.mrp||i.salePrice)).toLocaleString()}</td>
         </tr>`;
       }).join('')}</tbody>
-      <tfoot><tr style="background:var(--bg3);font-weight:700">
-        <td colspan="6" style="padding:8px 10px">TOTAL (${items.length} items)</td>
+      <tfoot><tr style="background:var(--bg3);font-weight:700;font-size:12px">
+        <td colspan="6" style="padding:8px 10px">TOTAL (${items.length})</td>
         <td style="color:var(--acc)">${totalSoldQty}</td>
         <td class="${totalCurStock<=0?'cr':'cg'}">${totalCurStock}</td>
         <td colspan="3"></td>
@@ -5320,108 +5511,62 @@ function renderPartySold(){
       </tfoot>
     </table></div>`;
 
-  } else if(grp==='article'){
-    // Group by article — show color×size matrix within each article
-    const artMap={};
-    items.forEach(i=>{
-      if(!artMap[i.article])artMap[i.article]={items:[],sold:0,stock:0,category:i.category,brand:i.brand,salePrice:i.salePrice,mrp:i.mrp||i.salePrice};
-      artMap[i.article].items.push(i);
-      artMap[i.article].sold +=(soldMap[i.itemName]||0);
-      artMap[i.article].stock+=i.stock;
-    });
-    const rows=Object.entries(artMap).sort((a,b)=>{
-      if(srt==='soldDesc')return b[1].sold-a[1].sold;
-      if(srt==='nameAsc') return a[0].localeCompare(b[0]);
-      return b[1].sold-a[1].sold;
-    });
-    const img_store=DB.images||{};
-    el.innerHTML=rows.map(([art,d])=>{
-      const img=img_store[art];
-      const stkCls=d.stock<=0?'cr':d.stock<=3?'cy':'cg';
-      // Color × Size matrix
-      const colorMap={};
-      d.items.forEach(i=>{
-        if(!colorMap[i.color])colorMap[i.color]={};
-        colorMap[i.color][i.size]={stock:i.stock,sold:soldMap[i.itemName]||0,item:i};
-      });
-      const allSizes=[...new Set(d.items.map(i=>i.size))].sort();
-      return `<div style="background:var(--card);border:1px solid var(--bdr);border-radius:12px;overflow:hidden;margin-bottom:10px">
-        <div style="display:grid;grid-template-columns:90px 1fr;gap:0">
-          <div style="height:100%;min-height:90px;background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:28px;overflow:hidden">
-            ${img?`<img src="${img}" style="width:100%;height:100%;object-fit:cover">`:'👗'}
-          </div>
-          <div style="padding:10px 12px">
-            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:4px">
-              <div>
-                <div style="font-size:13px;font-weight:800;cursor:pointer;color:var(--acc)" onclick="openGroup('${esc(art)}')">${art}</div>
-                <div style="font-size:11px;color:var(--t3)"><span class="bx bcat">${d.category}</span> <span class="bx bbr">${d.brand}</span></div>
-              </div>
-              <div style="text-align:right">
-                <div style="font-size:14px;font-weight:800;color:var(--acc)">${d.sold} sold</div>
-                <div class="${stkCls}" style="font-size:11px">${d.stock<=0?'All Out':d.stock+' in stock'}</div>
-              </div>
-            </div>
-            <!-- Color × Size sold/stock pills -->
-            ${Object.entries(colorMap).map(([clr,sizes])=>`
-              <div style="margin-bottom:5px">
-                <div style="font-size:10px;color:var(--t3);margin-bottom:3px;display:flex;align-items:center;gap:4px">${cswDot(clr,10)}<span>${clr}</span></div>
-                <div style="display:flex;gap:4px;flex-wrap:wrap">
-                  ${allSizes.map(sz=>{
-                    const sd=sizes[sz];
-                    if(!sd)return `<div style="opacity:.25;font-size:10px;padding:3px 7px;border-radius:5px;background:var(--bg3);color:var(--t3)">${sz}<br>—</div>`;
-                    const hasSold=sd.sold>0, hasStock=sd.stock>0;
-                    return `<div onclick="addToOrderCart(${JSON.stringify(sd.item).replace(/"/g,'&quot;')},1)" style="font-size:10px;padding:4px 8px;border-radius:6px;cursor:pointer;text-align:center;background:${hasSold?'rgba(99,102,241,.12)':'var(--bg3)'};border:1px solid ${hasSold?'var(--acc)':'var(--bdr)'}" title="Click to add to Order Cart">
-                      <div style="font-weight:800">${sz}</div>
-                      ${hasSold?`<div style="color:var(--acc);font-weight:700">📤${sd.sold}</div>`:''}
-                      <div class="${hasStock?sd.stock<=3?'cy':'cg':'cr'}" style="font-size:9px">${hasStock?sd.stock+'✓':'OUT'}</div>
-                    </div>`;
-                  }).join('')}
-                </div>
-              </div>`).join('')}
-          </div>
-        </div>
-      </div>`;
-    }).join('');
-
+  // ── BY CATEGORY or BRAND: Summary with click to drill ──
   } else {
-    // Group by category or brand
-    const groupKey = grp==='category'?'category':'brand';
+    const gKey=grp==='category'?'category':'brand';
     const gMap={};
     items.forEach(i=>{
-      const k=i[groupKey]||'—';
-      if(!gMap[k])gMap[k]={items:[],sold:0,stock:0,soldMrp:0};
+      const k=i[gKey]||'—';
+      if(!gMap[k])gMap[k]={items:[],sold:0,stock:0,soldMrp:0,soldCost:0};
       gMap[k].items.push(i);
       gMap[k].sold +=(soldMap[i.itemName]||0);
       gMap[k].stock+=i.stock;
-      gMap[k].soldMrp+=(soldMap[i.itemName]||0)*(i.mrp||i.salePrice);
+      gMap[k].soldMrp +=(soldMap[i.itemName]||0)*(i.mrp||i.salePrice);
+      gMap[k].soldCost+=(soldMap[i.itemName]||0)*(i.costPer||0);
     });
     const gRows=Object.entries(gMap).sort((a,b)=>b[1].sold-a[1].sold);
     el.innerHTML=`<div class="tw"><table>
       <thead><tr>
         <th>${grp==='category'?'Category':'Brand'}</th>
-        <th>Variants</th><th>Units Sold</th><th>Cur.Stock</th>
-        <th>Sold MRP ₹</th><th>Avg Sale ₹</th>
+        <th>Articles</th><th>Variants</th>
+        <th>Units Sold</th><th>Cur.Stock</th>
+        <th>Sold MRP ₹</th><th>Sold Cost ₹</th><th>Profit ₹</th>
       </tr></thead>
       <tbody>${gRows.map(([k,d])=>{
-        const avgSale=d.items.length?Math.round(d.items.reduce((s,i)=>s+i.salePrice,0)/d.items.length):0;
-        return`<tr onclick="document.getElementById('pbrSoldSearch').value='${esc(k)}';renderPartySold()" style="cursor:pointer" onmouseover="this.style.background='rgba(99,102,241,.05)'" onmouseout="this.style.background=''">
+        const articles=[...new Set(d.items.map(i=>i.article))].length;
+        const gp=d.soldMrp-d.soldCost;
+        return`<tr onclick="document.getElementById('pbrSoldSearch').value='${esc(k)}';document.getElementById('pbrSoldGroup').value='article';renderPartySold()" style="cursor:pointer" onmouseover="this.style.background='rgba(99,102,241,.05)'" onmouseout="this.style.background=''">
           <td>${grp==='category'?`<span class="bx bcat">${k}</span>`:`<span class="bx bbr">${k}</span>`}</td>
+          <td style="font-weight:600">${articles}</td>
           <td>${d.items.length}</td>
           <td style="font-weight:800;color:var(--acc)">${d.sold}</td>
           <td class="${d.stock<=0?'cr':d.stock<=3?'cy':'cg'}">${d.stock<=0?'All Out':d.stock}</td>
           <td style="color:var(--grn);font-weight:700">₹${Math.round(d.soldMrp).toLocaleString()}</td>
-          <td>₹${avgSale}</td>
+          <td style="color:var(--rose)">₹${Math.round(d.soldCost).toLocaleString()}</td>
+          <td style="font-weight:700;color:${gp>=0?'var(--grn)':'var(--red)'}">${gp>=0?'+':''}₹${Math.round(gp).toLocaleString()}</td>
         </tr>`;
       }).join('')}</tbody>
       <tfoot><tr style="background:var(--bg3);font-weight:700">
-        <td colspan="2" style="padding:8px 10px">TOTAL (${gRows.length} groups)</td>
+        <td colspan="3" style="padding:8px 10px">TOTAL (${gRows.length} groups)</td>
         <td style="color:var(--acc)">${totalSoldQty}</td>
         <td class="${totalCurStock<=0?'cr':'cg'}">${totalCurStock}</td>
         <td style="color:var(--grn)">₹${Math.round(totalSoldMrp).toLocaleString()}</td>
-        <td></td>
+        <td style="color:var(--rose)">₹${Math.round(totalSoldCost).toLocaleString()}</td>
+        <td style="color:var(--grn)">₹${Math.round(grossProfit).toLocaleString()}</td>
       </tfoot>
     </table></div>`;
   }
+}
+
+function rebuildPbrBrandDropdown(){
+  const cat=document.getElementById('pbrSoldCat')?.value||'';
+  const soldMap=Object.fromEntries(DB.sold.map(s=>[s.itemName,s.salesQty]));
+  const allItems=DB.master.filter(i=>i.partyNo===_selParty&&soldMap[i.itemName]&&(!cat||i.category===cat));
+  const brands=[...new Set(allItems.map(i=>i.brand))].sort();
+  const brdSel=document.getElementById('pbrSoldBrand');
+  if(!brdSel) return;
+  brdSel.innerHTML='<option value="">All Brands</option>';
+  brands.forEach(b=>brdSel.add(new Option(b,b)));
 }
 
 function clearPbrSoldFilters(){
@@ -5549,6 +5694,365 @@ function clearAllPhotos(){
     });
   });
 }
+
+/* ═══════════════════════════════════════════════
+   BARCODE / LABEL EXPORT
+   Format: SKU | Code | MRP | Qty | D.no | Category | Barcode
+   SKU     = itemName  (article-color-size)
+   Code    = rawCode   (party-brand-rate)
+   MRP     = mrp or salePrice
+   Qty     = stock
+   D.no    = dno
+   Category= category
+   Barcode = itemCode (purchase code from col3)
+═══════════════════════════════════════════════ */
+let BC_ITEMS = {}; // { itemName: { item, qty, selected } }
+
+function bcInit(){
+  // Fill filter dropdowns
+  const parties=[...new Set(DB.master.map(i=>i.partyNo).filter(Boolean))].sort((a,b)=>+a-+b);
+  const brands=[...new Set(DB.master.map(i=>i.brand).filter(Boolean))].sort();
+  const cats=[...new Set(DB.master.map(i=>i.category).filter(Boolean))].sort();
+
+  const bp=document.getElementById('bcParty');
+  if(bp&&bp.options.length<=1) parties.forEach(p=>bp.add(new Option('Party '+p,p)));
+
+  const bb=document.getElementById('bcBrand');
+  if(bb&&bb.options.length<=1) brands.forEach(b=>bb.add(new Option(b,b)));
+
+  const bc=document.getElementById('bcCategory');
+  if(bc&&bc.options.length<=1) cats.forEach(c=>bc.add(new Option(c,c)));
+
+  bcRenderTable();
+}
+
+function bcSearchItems(){
+  const q   = (document.getElementById('bcSearch')?.value||'').toLowerCase();
+  const par = document.getElementById('bcParty')?.value||'';
+  const br  = document.getElementById('bcBrand')?.value||'';
+  const cat = document.getElementById('bcCategory')?.value||'';
+  const stk = document.getElementById('bcStockFilter')?.value||'';
+  const res = document.getElementById('bcSearchResults');
+  if(!res) return;
+
+  if(!q && !par && !br && !cat && !stk){res.style.display='none';return;}
+
+  // Filter items
+  const items=DB.master.filter(i=>{
+    if(i.isPurchaseReturn) return false;
+    if(q && !i.itemName.toLowerCase().includes(q) && !i.article.toLowerCase().includes(q) && !i.dno.includes(q) && !i.brand.toLowerCase().includes(q) && !i.category.toLowerCase().includes(q)) return false;
+    if(par && i.partyNo!==par) return false;
+    if(br  && i.brand!==br)    return false;
+    if(cat && i.category!==cat) return false;
+    if(stk==='in'  && i.stock<=0) return false;
+    if(stk==='out' && i.stock>0)  return false;
+    return true;
+  });
+
+  if(!items.length){res.innerHTML='<div style="padding:12px;font-size:12px;color:var(--t3);text-align:center">No items found</div>';res.style.display='block';return;}
+
+  // Group by article
+  const groups=getGroups(items);
+  const artEntries=Object.entries(groups).slice(0,30);
+
+  res.style.display='block';
+  res.innerHTML=artEntries.map(([art,g])=>{
+    const colorMap={};
+    g.items.forEach(i=>{
+      const c=i.color||'—';
+      if(!colorMap[c])colorMap[c]={sizes:{},totalStock:0};
+      colorMap[c].sizes[i.size||'F']={stock:i.stock,item:i};
+      colorMap[c].totalStock+=i.stock;
+    });
+    const allSizes=[...new Set(g.items.map(i=>i.size||'F'))].sort();
+    const inStk=g.items.filter(i=>i.stock>0).length;
+    const outStk=g.items.filter(i=>i.stock<=0).length;
+    const img=DB.images[art];
+    return `<div class="bc-art-row" style="border-bottom:1px solid var(--bdr)">
+      <!-- Article header -->
+      <div style="padding:8px 12px;display:flex;align-items:center;gap:10px;cursor:pointer;background:var(--bg3)" onclick="bcToggleArt('${esc(art)}')" onmouseover="this.style.background='var(--bg2)'" onmouseout="this.style.background='var(--bg3)'">
+        <div style="width:36px;height:36px;border-radius:6px;background:var(--bg2);overflow:hidden;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:18px">
+          ${img?`<img src="${img}" style="width:100%;height:100%;object-fit:cover">`:'👗'}
+        </div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${art}</div>
+          <div style="font-size:10px;color:var(--t3)">${g.category} · <span class="bx bbr" style="font-size:9px">${g.brand||'—'}</span></div>
+        </div>
+        <div style="text-align:right;flex-shrink:0">
+          <div style="font-size:11px"><span class="cg">${inStk} in</span> <span class="cr">${outStk} out</span></div>
+          <div style="font-size:10px;font-weight:700;color:var(--acc)">₹${g.salePrice}</div>
+        </div>
+        <span id="bc-arr-${esc(art)}" style="color:var(--t3);font-size:14px">▶</span>
+      </div>
+      <!-- Sizes panel (hidden by default) -->
+      <div id="bc-sizes-${esc(art)}" style="display:none;padding:10px 12px;background:var(--card)">
+        <!-- Quick add buttons -->
+        <div style="display:flex;gap:6px;margin-bottom:8px">
+          <button class="btn bg sm" onclick="event.stopPropagation();bcAddAllSizes('${esc(art)}','all')" style="font-size:11px">+ All Sizes</button>
+          <button class="btn bg sm" onclick="event.stopPropagation();bcAddAllSizes('${esc(art)}','oos')" style="font-size:11px;border-color:var(--red);color:var(--red)">+ OOS Only</button>
+          <button class="btn bg sm" onclick="event.stopPropagation();bcAddAllSizes('${esc(art)}','in')" style="font-size:11px;border-color:var(--grn);color:var(--grn)">+ In-Stock</button>
+        </div>
+        ${Object.entries(colorMap).map(([clr,cd])=>`
+          <div style="margin-bottom:8px">
+            <div style="font-size:10px;font-weight:700;color:var(--t3);margin-bottom:5px;display:flex;align-items:center;gap:4px">
+              ${cswDot(clr,10)}<span>${clr}</span>
+              <span style="color:var(--t3)">(${cd.totalStock} pcs)</span>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:5px">
+              ${allSizes.map(sz=>{
+                const sd=cd.sizes[sz];
+                if(!sd)return `<div style="opacity:.25;padding:5px 9px;border-radius:7px;border:1px solid var(--bdr);font-size:11px;font-weight:700;color:var(--t3);min-width:40px;text-align:center">${sz}<div style="font-size:9px">N/A</div></div>`;
+                const inCart=!!BC_ITEMS[sd.item.itemName];
+                const cls=sd.stock<=0?'rgba(239,68,68,.15)':sd.stock<=3?'rgba(245,158,11,.15)':'rgba(16,185,129,.15)';
+                const bdr=sd.stock<=0?'rgba(239,68,68,.4)':sd.stock<=3?'rgba(245,158,11,.5)':'rgba(16,185,129,.4)';
+                const txtcls=sd.stock<=0?'var(--red)':sd.stock<=3?'var(--yel)':'var(--grn)';
+                return `<div onclick="event.stopPropagation();bcToggleSize('${esc(sd.item.itemName)}')" style="padding:5px 9px;border-radius:7px;border:2px solid ${inCart?'var(--acc)':bdr};background:${inCart?'rgba(99,102,241,.2)':cls};cursor:pointer;min-width:42px;text-align:center;transition:all .15s" id="bc-sz-${esc(sd.item.itemName)}">
+                  <div style="font-size:12px;font-weight:800;color:${inCart?'var(--acc)':'var(--txt)'}">${sz}</div>
+                  <div style="font-size:9px;font-weight:700;color:${inCart?'var(--acc)':txtcls}">${sd.stock<=0?'OUT':sd.stock}</div>
+                  ${inCart?'<div style="font-size:8px;color:var(--acc)">✓</div>':''}
+                </div>`;
+              }).join('')}
+            </div>
+          </div>`).join('')}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function bcToggleArt(art){
+  const panel=document.getElementById('bc-sizes-'+art);
+  const arr=document.getElementById('bc-arr-'+art);
+  if(!panel) return;
+  const isOpen=panel.style.display!=='none';
+  panel.style.display=isOpen?'none':'block';
+  if(arr) arr.textContent=isOpen?'▶':'▼';
+}
+
+function bcToggleSize(itemName){
+  if(BC_ITEMS[itemName]){
+    // Already in list — remove it
+    delete BC_ITEMS[itemName];
+    toast('Removed','ok');
+  } else {
+    const item=DB.master.find(i=>i.itemName===itemName);
+    if(!item) return;
+    BC_ITEMS[itemName]={item:{...item}, qty:Math.max(1,item.stock>0?item.stock:1), selected:true};
+    toast('Added: '+itemName,'ok');
+  }
+  // Refresh the size pill UI in search results
+  const pill=document.getElementById('bc-sz-'+itemName);
+  if(pill){
+    const inCart=!!BC_ITEMS[itemName];
+    const i=DB.master.find(x=>x.itemName===itemName);
+    const bdr=i.stock<=0?'rgba(239,68,68,.4)':i.stock<=3?'rgba(245,158,11,.5)':'rgba(16,185,129,.4)';
+    const cls=i.stock<=0?'rgba(239,68,68,.15)':i.stock<=3?'rgba(245,158,11,.15)':'rgba(16,185,129,.15)';
+    pill.style.borderColor=inCart?'var(--acc)':bdr;
+    pill.style.background=inCart?'rgba(99,102,241,.2)':cls;
+    // Re-render pill content
+    const sz=i.size||'F';
+    const txtcls=i.stock<=0?'var(--red)':i.stock<=3?'var(--yel)':'var(--grn)';
+    pill.innerHTML=`<div style="font-size:12px;font-weight:800;color:${inCart?'var(--acc)':'var(--txt)'}">${sz}</div>
+      <div style="font-size:9px;font-weight:700;color:${inCart?'var(--acc)':txtcls}">${i.stock<=0?'OUT':i.stock}</div>
+      ${inCart?'<div style="font-size:8px;color:var(--acc)">✓</div>':''}`;
+  }
+  bcRenderTable();
+}
+
+function bcAddAllSizes(art, filter){
+  const g=getGroups()[art]; if(!g) return;
+  let added=0;
+  g.items.forEach(i=>{
+    if(i.isPurchaseReturn) return;
+    if(filter==='oos' && i.stock>0) return;
+    if(filter==='in'  && i.stock<=0) return;
+    BC_ITEMS[i.itemName]={item:{...i}, qty:Math.max(1,i.stock>0?i.stock:1), selected:true};
+    added++;
+  });
+  bcSearchItems(); // refresh pills
+  bcRenderTable();
+  toast(added+' sizes of '+art+' added','ok');
+}
+
+function bcAddItem(itemName){
+  // Legacy - redirect to bcToggleSize
+  bcToggleSize(itemName);
+}
+
+function bcAddAllFiltered(){
+  const q   = (document.getElementById('bcSearch')?.value||'').toLowerCase();
+  const par = document.getElementById('bcParty')?.value||'';
+  const br  = document.getElementById('bcBrand')?.value||'';
+  const cat = document.getElementById('bcCategory')?.value||'';
+  const stk = document.getElementById('bcStockFilter')?.value||'';
+
+  const items=DB.master.filter(i=>{
+    if(i.isPurchaseReturn) return false;
+    if(q && !i.itemName.toLowerCase().includes(q) && !i.article.toLowerCase().includes(q) && !i.brand.toLowerCase().includes(q)) return false;
+    if(par && i.partyNo!==par) return false;
+    if(br  && i.brand!==br)    return false;
+    if(cat && i.category!==cat) return false;
+    if(stk==='in'  && i.stock<=0) return false;
+    if(stk==='out' && i.stock>0)  return false;
+    return true;
+  });
+
+  if(!items.length){toast('No items match filters','err');return;}
+  items.forEach(i=>{ BC_ITEMS[i.itemName]={item:{...i}, qty:i.stock>0?i.stock:1, selected:true}; });
+  bcRenderTable();
+  toast(items.length+' items added','ok');
+}
+
+function bcSelectAll(val){
+  Object.values(BC_ITEMS).forEach(o=>o.selected=val);
+  bcRenderTable();
+}
+
+function bcClear(){
+  BC_ITEMS={};
+  bcRenderTable();
+}
+
+function bcRenderTable(){
+  const items=Object.values(BC_ITEMS);
+  const el=document.getElementById('bcTable'); if(!el) return;
+  const cnt=document.getElementById('bcCount');
+  const footer=document.getElementById('bcFooter');
+  const info=document.getElementById('bcExportInfo');
+
+  const selected=items.filter(o=>o.selected);
+  if(cnt) cnt.textContent=items.length;
+
+  const totalQty=selected.reduce((s,o)=>s+o.qty,0);
+  if(footer) footer.textContent=selected.length+' selected · '+totalQty+' total qty';
+  if(info)   info.textContent=selected.length+' rows will be exported · SKU/Code/MRP/Qty/D.no/Category/Barcode';
+
+  if(!items.length){
+    el.innerHTML='<div class="empty" style="padding:30px"><div style="font-size:32px;margin-bottom:8px">🏷️</div><p>Search and add items</p></div>';
+    return;
+  }
+
+  el.innerHTML=`<table style="width:100%;border-collapse:collapse">
+    <thead><tr>
+      <th style="padding:7px 8px;background:var(--bg3);font-size:9.5px;font-weight:700;color:var(--t3);text-transform:uppercase;position:sticky;top:0;width:28px">☑</th>
+      <th style="padding:7px 8px;background:var(--bg3);font-size:9.5px;font-weight:700;color:var(--t3);text-transform:uppercase;position:sticky;top:0">SKU (Item Name)</th>
+      <th style="padding:7px 8px;background:var(--bg3);font-size:9.5px;font-weight:700;color:var(--t3);text-transform:uppercase;position:sticky;top:0">Code (Variant)</th>
+      <th style="padding:7px 8px;background:var(--bg3);font-size:9.5px;font-weight:700;color:var(--t3);text-transform:uppercase;position:sticky;top:0">MRP ₹</th>
+      <th style="padding:7px 8px;background:var(--bg3);font-size:9.5px;font-weight:700;color:var(--t3);text-transform:uppercase;position:sticky;top:0">Qty</th>
+      <th style="padding:7px 8px;background:var(--bg3);font-size:9.5px;font-weight:700;color:var(--t3);text-transform:uppercase;position:sticky;top:0">D.no</th>
+      <th style="padding:7px 8px;background:var(--bg3);font-size:9.5px;font-weight:700;color:var(--t3);text-transform:uppercase;position:sticky;top:0">Category</th>
+      <th style="padding:7px 8px;background:var(--bg3);font-size:9.5px;font-weight:700;color:var(--t3);text-transform:uppercase;position:sticky;top:0">Barcode</th>
+      <th style="padding:7px 8px;background:var(--bg3);font-size:9.5px;font-weight:700;color:var(--t3);text-transform:uppercase;position:sticky;top:0">✕</th>
+    </tr></thead>
+    <tbody>${items.map(o=>{
+      const i=o.item;
+      const mrp=i.mrp||i.salePrice;
+      const barcode=i.itemCode||'';
+      return `<tr onmouseover="this.style.background='rgba(99,102,241,.04)'" onmouseout="this.style.background=''">
+        <td style="padding:5px 8px;text-align:center"><input type="checkbox" ${o.selected?'checked':''} onchange="BC_ITEMS['${esc(i.itemName)}'].selected=this.checked;bcRenderTable()" style="width:auto;accent-color:var(--acc)"></td>
+        <td style="padding:5px 8px;font-size:11.5px;font-weight:700">${i.itemName}</td>
+        <td style="padding:5px 8px;font-size:11px;color:var(--t2)">${i.rawCode||'—'}</td>
+        <td style="padding:5px 8px;font-weight:700">₹${mrp}</td>
+        <td style="padding:5px 8px"><input type="number" min="1" value="${o.qty}" onchange="BC_ITEMS['${esc(i.itemName)}'].qty=Math.max(1,parseInt(this.value)||1);bcRenderTable()" style="width:60px;text-align:center;padding:3px 5px;font-size:12px"></td>
+        <td style="padding:5px 8px;font-family:monospace;font-size:11px;color:var(--cyn)">${i.dno||'—'}</td>
+        <td style="padding:5px 8px"><span class="bx bcat" style="font-size:10px">${i.category}</span></td>
+        <td style="padding:5px 8px;font-family:monospace;font-size:11px">${barcode||'—'}</td>
+        <td style="padding:5px 8px;text-align:center"><button onclick="delete BC_ITEMS['${esc(i.itemName)}'];bcRenderTable()" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:14px">✕</button></td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table>`;
+}
+
+function bcGetRows(){
+  return Object.values(BC_ITEMS).filter(o=>o.selected).map(o=>{
+    const i=o.item;
+    return {
+      'SKU':       i.itemName,
+      'Code (Variant)': i.rawCode||'',
+      'MRP (Rs)':  i.mrp||i.salePrice,
+      'Qty':       o.qty,
+      'D.no':      i.dno||'',
+      'Category':  i.category,
+      'Barcode':   i.itemCode||''
+    };
+  });
+}
+
+function bcExportExcel(){
+  const rows=bcGetRows();
+  if(!rows.length){toast('Nothing selected','err');return;}
+
+  const wb=XLSX.utils.book_new();
+  const ws=XLSX.utils.json_to_sheet(rows, {
+    header:['SKU','Code (Variant)','MRP (Rs)','Qty','D.no','Category','Barcode']
+  });
+
+  // Column widths
+  ws['!cols']=[
+    {wch:32},{wch:22},{wch:10},{wch:6},{wch:8},{wch:20},{wch:16}
+  ];
+
+  XLSX.utils.book_append_sheet(wb, ws, 'Barcodes');
+  XLSX.writeFile(wb,'ROSY_Barcodes_'+new Date().toISOString().split('T')[0]+'.xlsx');
+  toast('Exported '+rows.length+' rows to Excel ✓','ok');
+}
+
+function bcPrintLabels(){
+  const rows=bcGetRows();
+  if(!rows.length){toast('Nothing selected','err');return;}
+
+  // Generate printable label sheet
+  const sn=CFG.storeName||'ROSY';
+  let html=`<html><head><title>Labels - ${sn}</title><style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Segoe UI',sans-serif;background:#fff}
+    .page{padding:8mm}
+    .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:4mm}
+    .label{border:1px solid #ccc;border-radius:4px;padding:5px 6px;font-size:9px;break-inside:avoid;min-height:28mm;display:flex;flex-direction:column;justify-content:space-between}
+    .store{font-size:8px;font-weight:700;color:#6366f1;text-transform:uppercase;letter-spacing:1px;margin-bottom:2px}
+    .sku{font-size:10px;font-weight:800;color:#1e1b4b;margin-bottom:1px;word-break:break-all}
+    .cat{font-size:8px;color:#666;margin-bottom:3px}
+    .mrp{font-size:13px;font-weight:900;color:#1e1b4b}
+    .mrp-lbl{font-size:7px;color:#888}
+    .barcode{font-family:monospace;font-size:8px;color:#333;letter-spacing:1px;margin-top:3px;border-top:1px solid #eee;padding-top:3px}
+    .dno{font-size:7.5px;color:#888}
+    @media print{@page{margin:8mm;size:A4}body{-webkit-print-color-adjust:exact}}
+  </style></head><body><div class="page"><div class="grid">`;
+
+  rows.forEach(r=>{
+    // Repeat label qty times
+    for(let q=0;q<Math.min(r.Qty,50);q++){
+      html+=`<div class="label">
+        <div>
+          <div class="store">${sn}</div>
+          <div class="sku">${r.SKU}</div>
+          <div class="cat">${r.Category} · ${r['Code (Variant)']||''}</div>
+        </div>
+        <div>
+          <div>
+            <div class="mrp-lbl">MRP (Incl. of all taxes)</div>
+            <div class="mrp">₹${r['MRP (Rs)']}</div>
+          </div>
+          <div class="barcode">${r.Barcode||r['D.no']}</div>
+          <div class="dno">D.no: ${r['D.no']}</div>
+        </div>
+      </div>`;
+    }
+  });
+
+  html+=`</div></div></body></html>`;
+  const w=window.open('','_blank');
+  w.document.write(html);
+  w.document.close();
+  setTimeout(()=>w.print(),500);
+}
+
+// Close search dropdown when clicking outside
+document.addEventListener('click',e=>{
+  if(!e.target.closest('#bcSearch')&&!e.target.closest('#bcSearchResults')){
+    const r=document.getElementById('bcSearchResults');
+    if(r) r.style.display='none';
+  }
+});
 
 /* ─── INIT ──────────────────────────────────── */
 checkSession();loadSettings();applySettings();applyDvColors();applyStoredTopbarColors();loadDB();renderDash();renderCart();
